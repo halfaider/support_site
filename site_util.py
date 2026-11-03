@@ -2,7 +2,8 @@ import re
 import base64
 import functools
 import urllib.parse
-from typing import Any, Callable, Sequence
+from typing import Any
+from collections.abc import Callable, Sequence
 
 import lxml.html
 
