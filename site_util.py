@@ -6,7 +6,6 @@ from typing import Any, Callable, Sequence
 
 import lxml.html
 
-from tool import ToolUtil
 from .setup import *
 
 import requests as binary_requests
@@ -43,13 +42,7 @@ class SiteUtil(object):
         return res.text
 
     @classmethod
-    def get_response(cls, url, proxy_url=None, headers=None, post_data=None, cookies=None, verify=None, timeout=30.0, ssrf_safe=False):
-        if ssrf_safe:
-            from .ssrf_guard import SSRFRejected
-            if post_data is not None:
-                raise SSRFRejected()
-            return cls.get_image_response(url, proxy_url=proxy_url, headers=headers, cookies=cookies,
-                                          verify=verify, timeout=timeout, ssrf_safe=True)
+    def get_response(cls, url, proxy_url=None, headers=None, post_data=None, cookies=None, verify=None, timeout=30.0):
         proxies = None
         if proxy_url is not None and proxy_url != '':
             proxies = {"http"  : proxy_url, "https" : proxy_url}
@@ -66,19 +59,14 @@ class SiteUtil(object):
             else:
                 res = cls.session.post(url, headers=headers, proxies=proxies, data=post_data, cookies=cookies, timeout=timeout, verify=verify)
         if not 300 > res.status_code > 199:
-            if ssrf_safe:
-                logger.warning('Remote media HTTP status: %s', res.status_code)
-            else:
-                logger.warning(f'http_code={res.status_code} url="{res.url}" "body="{res.text}"')
+            logger.warning(f'http_code={res.status_code} url="{res.url}" "body="{res.text}"')
         return res
 
     @classmethod
-    def get_image_response(cls, url, proxy_url=None, headers=None, cookies=None, verify=None, timeout=30.0, ssrf_safe=False):
+    def get_image_response(cls, url, proxy_url=None, headers=None, cookies=None, verify=None, timeout=30.0):
         """Receive image bytes with requests; borrow only scoped page cookies/headers."""
         from http.cookiejar import CookieJar
-        from .ssrf_guard import fetch, _redirect_cookies, MAX_IMAGE_BYTES, SSRFRejected, unwrap_image_url
-        if ssrf_safe:
-            url = unwrap_image_url(url)
+        from .ssrf_guard import _redirect_cookies, MAX_IMAGE_BYTES, SSRFRejected
         inherited = dict(getattr(cls.session, 'headers', {}) or {})
         inherited.update((default_headers if headers is None else headers) or {})
         # Page-session credentials without a domain scope must not be attached
@@ -101,9 +89,6 @@ class SiteUtil(object):
         proxies = {'http': proxy_url, 'https': proxy_url} if proxy_url else None
         with binary_requests.Session() as session:
             session.trust_env = False
-            if ssrf_safe:
-                return fetch(url, client='requests', transport=session, proxy=proxies, headers=outgoing,
-                             cookies=jar, verify=effective_verify, timeout=timeout)
             session.cookies = jar
             response = session.get(url, headers=outgoing, proxies=proxies, verify=effective_verify,
                                    timeout=timeout, stream=True)
@@ -121,47 +106,6 @@ class SiteUtil(object):
 
 
     @classmethod
-    def process_image_mode(cls, image_mode, image_url, proxy_url=None):
-        if image_url is None:
-            return
-        ret = image_url
-        if image_mode == '1':
-            tmp = '{ddns}/metadata/api/image_proxy?url=' + urllib.parse.quote_plus(image_url)
-            if proxy_url:
-                from .ssrf_guard import image_proxy_site
-                site = image_proxy_site(proxy_url, F.PluginManager.get_plugin_instance('metadata'))
-                if site:
-                    tmp += '&proxy_site=' + urllib.parse.quote_plus(site)
-            ret = ToolUtil.make_apikey_url(tmp)
-        elif image_mode == '2':
-            tmp = '{ddns}/metadata/api/discord_proxy?url=' + urllib.parse.quote_plus(image_url)
-            ret = ToolUtil.make_apikey_url(tmp)
-        elif image_mode == '3': # 고정 디스코드 URL.
-            ret = cls.discord_proxy_image(image_url)
-        elif image_mode == '4': #landscape to poster
-            ret = '{ddns}/metadata/normal/image_process.jpg?mode=landscape_to_poster&url=' + urllib.parse.quote_plus(image_url)
-            ret = ret.format(ddns=F.SystemModelSetting.get('ddns'))
-        elif image_mode == '5':  #로컬에 포스터를 만들고
-            from PIL import Image
-            from io import BytesIO
-            im = Image.open(BytesIO(cls.get_image_response(image_url, proxy_url=proxy_url).content))
-            width, height = im.size
-            filename = 'proxy_%s.jpg' % str(time.time())
-            filepath = os.path.join(F.config['path_data'], 'tmp', filename)
-            if width > height:
-                left = width/1.895734597
-                top = 0
-                right = width
-                bottom = height
-                poster = im.crop((left, top, right, bottom))
-                poster.save(filepath)
-            else:
-                im.save(filepath)
-            ret = cls.discord_proxy_image_localfile(filepath)
-        return ret
-
-
-    @classmethod
     def trans(cls, text, do_trans=True, source='ja', target='ko'):
         if do_trans:
             from trans import SupportTrans
@@ -170,47 +114,9 @@ class SiteUtil(object):
 
 
     @classmethod
-    def discord_proxy_get_target_poster(cls, image_url):
-        from tool_expand import ToolExpandDiscord
-        return ToolExpandDiscord.discord_proxy_get_target(image_url + 'av_poster')
-
-
-    @classmethod
-    def discord_proxy_set_target(cls, source, target):
-        from tool_expand import ToolExpandDiscord
-        return ToolExpandDiscord.discord_proxy_set_target(source, target)
-
-
-    @classmethod
-    def discord_proxy_set_target_poster(cls, source, target):
-        from tool_expand import ToolExpandDiscord
-        return ToolExpandDiscord.discord_proxy_set_target(source + 'av_poster', target)
-
-
-    @classmethod
-    def discord_proxy_image(cls, image_url):
-        from tool_expand import ToolExpandDiscord
-        return ToolExpandDiscord.discord_proxy_image(image_url)
-
-
-    @classmethod
     def discord_proxy_image_localfile(cls, filepath):
         from tool_expand import ToolExpandDiscord
         return ToolExpandDiscord.discord_proxy_image_localfile(filepath)
-
-
-    @classmethod
-    def get_image_url(cls, image_url, image_mode, proxy_url=None, with_poster=False):
-        try:
-            ret = {}
-            ret['image_url'] = cls.process_image_mode(image_mode, image_url, proxy_url=proxy_url)
-            if with_poster:
-                logger.debug(ret['image_url'])
-                ret['poster_image_url'] = cls.process_image_mode('5', ret['image_url']) #포스터이미지 url 본인 sjva
-        except Exception as e:
-            logger.error(f"Exception:{str(e)}")
-            logger.error(traceback.format_exc())
-        return ret
 
 
     @classmethod
@@ -221,7 +127,7 @@ class SiteUtil(object):
 
     @classmethod
     def remove_special_char(cls, text):
-        return re.sub('[-=+,#/\?:^$.@*\"※~&%ㆍ!』\\‘|\(\)\[\]\<\>`\'…》：]', '', text)
+        return re.sub(r'[-=+,#/\?:^$.@*\"※~&%ㆍ!』\\‘|\(\)\[\]\<\>`\'…》：]', '', text)
 
 
     @classmethod
@@ -399,33 +305,6 @@ class SiteUtil(object):
             return
         return lxml.html.fromstring(text)
 
-
-    @classmethod
-    def get_translated_tag(cls, type, tag):
-        tags_json = os.path.join(os.path.dirname(__file__), 'tags.json')
-        with open(tags_json, 'r', encoding='utf8') as f:
-            tags = json.load(f)
-
-        if type in tags:
-            if tag in tags[type]:
-                res = tags[type][tag]
-            else:
-                trans_text = SiteUtil.trans(tag, source='ja', target='ko').strip()
-                if cls.is_include_hangul(trans_text) or trans_text.replace(' ', '').isalnum():
-                    tags[type][tag] = trans_text
-                    with open(tags_json, 'w', encoding='utf8') as f:
-                        json.dump(tags, f, indent=4, ensure_ascii=False)
-                    res = tags[type][tag]
-                else:
-                    res = tag
-            return res
-        else:
-            return tag
-
-    av_genre = {u'巨尻':u'큰엉덩이', u'ギャル':u'갸루', u'着エロ':u'착에로', u'競泳・スクール水着':u'학교수영복', u'日焼け':u'태닝', u'指マン':u'핑거링', u'潮吹き':u'시오후키', u'ごっくん':u'곳쿤', u'パイズリ':u'파이즈리', u'手コキ':u'수음', u'淫語':u'음란한말', u'姉・妹':u'남매', u'お姉さん':u'누님', u'インストラクター':u'트레이너', u'ぶっかけ':u'붓카케', u'シックスナイン':u'69', u'ボディコン':u'타이트원피스', u'電マ':u'전동마사지', u'イタズラ':u'짖궂음', u'足コキ':u'풋잡', u'原作コラボ':u'원작각색', u'看護婦・ナース':u'간호사', u'コンパニオン':u'접객업', u'家庭教師':u'과외', u'キス・接吻':u'딥키스', u'局部アップ':u'음부확대', u'ポルチオ':u'자궁성감자극', u'セーラー服':u'교복', u'イラマチオ':u'격한페라·딥스로트', u'投稿':u'투고', u'キャンギャル':u'도우미걸', u'女優ベスト・総集編':u'베스트총집편', u'クンニ':u'커닐링구스', u'アナル':u'항문노출', u'超乳':u'폭유', u'復刻':u'리마스터', u'投稿':u'투고', u'義母':u'새어머니', u'おもちゃ':u'노리개', u'くノ一':u'여자닌자', u'羞恥' : u'수치심', u'ドラッグ':u'최음제', u'パンチラ':u'판치라', u'巨乳フェチ':u'큰가슴', u'巨乳':u'큰가슴', u'レズキス':u'레즈비언', u'レズ':u'레즈비언', u'スパンキング':u'엉덩이때리기', u'放尿・お漏らし':u'방뇨·오모라시', u'アクメ・オーガズム':u'절정·오르가즘', u'ニューハーフ':u'쉬메일', u'鬼畜':u'색마·양아치', u'辱め':u'능욕', u'フェラ':u'펠라치오'}
-    av_genre_ignore_ja = [u'DMM獨家']
-    av_genre_ignore_ko = [u'고화질', u'독점전달', u'세트상품', u'단체작품', u'기간한정세일', u'기리모자', u'데지모', u'슬림', u'미소녀', u'미유', u'망상족', u'거유', u'에로스', u'작은', u'섹시']
-    av_studio  = {u'乱丸':u'란마루', u'大洋図書':u'대양도서', u'ミル':u'미루', u'無垢':u'무쿠', u'サムシング':u'Something', u'本中':u'혼나카', u'ナンパJAPAN':u'난파 재팬', u'溜池ゴロー':u'다메이케고로', u'プラム':u'프라무', u'アップス':u'Apps', u'えむっ娘ラボ':u'엠코 라보', u'クンカ':u'킁카', u'映天':u'에이텐', u'ジャムズ':u'JAMS', u'牛感':u'규칸'}
 
     country_code_translate ={
         "GH" : u"가나",

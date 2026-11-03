@@ -3,7 +3,6 @@ import urllib.parse
 import requests
 
 from .setup import *
-from .site_util import SiteUtil
 
 SERVER_PLUGIN_DDNS = 'https://meta.sjva.me'
 WEB_DIRECT_URL = 'http://52.78.103.230:49734'
@@ -38,45 +37,6 @@ class MetadataServerUtil(object):
                 logger.info('%s Data save success. Thanks!!!!', code)
         except Exception as exception:
             logger.error('metaserver connection fail.. set_metadata')
-
-
-    @classmethod
-    def set_metadata_jav_censored(cls, code, data, keyword):
-        try:
-            if data['thumb'] is None or (code.startswith('C') and len(data['thumb']) < 2) or (code.startswith('D') and len(data['thumb']) < 1):
-                return
-            for tmp in data['thumb']:
-                if tmp['value'] is None or tmp['value'].find('.discordapp.') == -1:
-                    return
-                if requests.get(tmp['value']).status_code != 200:
-                    return
-            if SiteUtil.is_include_hangul(data['plot']) == False:
-                return
-            cls.set_metadata(code, data, keyword)
-        except Exception as e:
-            logger.error(f"Exception:{str(e)}")
-            logger.error(traceback.format_exc())
-
-
-    @classmethod
-    def set_metadata_jav_uncensored(cls, code, data, keyword):
-        try:
-            if data['thumb'] is None:
-                return
-            for tmp in data['thumb']:
-                if tmp['value'] is None or tmp['value'].find('.discordapp.') == -1:
-                    return
-                if requests.get(tmp['value']).status_code != 200:
-                    return
-            if SiteUtil.is_include_hangul(data['tagline']) == False:
-                return
-            if data['plot'] is not None and SiteUtil.is_include_hangul(data['plot']) == False:
-                return
-            cls.set_metadata(code, data, keyword)
-            logger.debug(f'set metadata uncensored complete, {code}')
-        except Exception as e:
-            logger.error(f"Exception:{str(e)}")
-            logger.error(traceback.format_exc())
 
 
     @classmethod

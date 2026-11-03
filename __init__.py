@@ -70,33 +70,3 @@ from .site_wavve import SiteWavveMovie, SiteWavveTv
 from .tool_imgur import ToolImgur
 from .tool_naver_cafe import ToolNaverCafe
 
-from .site_av.site_av_base import SiteAvBase
-
-from .site_av.site_avdbs import SiteAvdbs
-from .site_av.site_dmm import SiteDmm
-#from .site_av.site_hentaku import SiteHentaku
-from .site_av.site_jav321 import SiteJav321
-from .site_av.site_javbus import SiteJavbus
-from .site_av.site_mgstage import SiteMgstage
-from .site_av.site_javdb import SiteJavdb
-from .site_util_av import SiteUtilAv
-from .tool_discord import DiscordUtil
-
-from .site_av.site_1pondotv import Site1PondoTv
-from .site_av.site_10musume import Site10Musume
-from .site_av.site_paco import SitePaco
-from .site_av.site_carib import SiteCarib
-from .site_av.site_heyzo import SiteHeyzo
-from .site_av.site_fc2com import SiteFc2com
-
-from .site_av.site_stashdb import SiteStashdb
-from .site_av.site_tpdb import SiteTpdb
-
-"""
-from .site_fc2.site_7mmtv import Site7mmTv
-from .site_fc2.site_bp4x import SiteBp4x
-from .site_fc2.site_fc2cm import SiteFc2Cm
-from .site_fc2.site_fc2com import SiteFc2Com
-from .site_fc2.site_fc2hub import SiteFc2Hub
-from .site_fc2.site_msin import SiteMsin
-"""
